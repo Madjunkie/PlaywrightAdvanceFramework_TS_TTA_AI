@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How this.goto() flows internally</title>
+<style>
+  :root {
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --green: #10b981;
+    --green-strong: #0e8f70;
+    --ink: #181717;
+    --ink-soft: #2d2d2d;
+    --muted: #6b6963;
+    --line: #d9d5cc;
+    --surface: #ffffff;
+    --canvas: #f7f6f3;
+    --error: #e02f3a;
+    --code-bg: #f2f1ed;
+    --test: #6366f1;
+    --page: #10b981;
+    --base: #0891b2;
+    --config: #d97706;
+    --net: #7c3aed;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--canvas);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 44px 24px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--green-strong);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: 1.42rem;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-bottom: 10px;
+  }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .lead { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; max-width: 68ch; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 11px 15px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-family: var(--mono);
+    font-size: 0.71rem;
+    margin-bottom: 26px;
+  }
+  .legend i {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .legend span { color: var(--ink-soft); }
+
+  .keyline {
+    font-size: 0.86rem;
+    color: var(--ink-soft);
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--green);
+    border-radius: 8px;
+    margin-bottom: 38px;
+  }
+  .keyline b { font-weight: 700; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 18px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .flow { position: relative; margin-bottom: 44px; }
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    gap: 14px;
+    padding-bottom: 12px;
+  }
+  .step:last-child { padding-bottom: 0; }
+  .rail { position: relative; display: flex; justify-content: center; }
+  .rail::before {
+    content: "";
+    position: absolute;
+    top: 32px; bottom: -12px; left: 50%;
+    width: 2px; margin-left: -1px;
+    background: var(--line);
+  }
+  .step:last-child .rail::before { display: none; }
+  .n {
+    width: 32px; height: 32px;
+    flex: none;
+    border: 2px solid var(--line);
+    border-radius: 50%;
+    background: var(--surface);
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--muted);
+    display: grid;
+    place-items: center;
+    z-index: 1;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--line);
+    border-radius: 8px;
+    padding: 13px 16px;
+    min-width: 0;
+  }
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--code-bg);
+    color: var(--muted);
+    margin-bottom: 9px;
+  }
+  .what { font-size: 0.88rem; font-weight: 600; margin-bottom: 8px; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.79rem;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    word-break: break-word;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 10px 12px;
+    color: var(--ink-soft);
+    line-height: 1.65;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  pre code { background: none; padding: 0; }
+  .note { font-size: 0.82rem; color: var(--muted); margin-top: 8px; }
+  .note b { color: var(--ink-soft); font-weight: 600; }
+
+  .l-test   .card { border-left-color: var(--test); }
+  .l-test   .n    { border-color: var(--test); color: var(--test); }
+  .l-page   .card { border-left-color: var(--page); }
+  .l-page   .n    { border-color: var(--page); color: var(--green-strong); }
+  .l-base   .card { border-left-color: var(--base); }
+  .l-base   .n    { border-color: var(--base); color: var(--base); }
+  .l-config .card { border-left-color: var(--config); }
+  .l-config .n    { border-color: var(--config); color: var(--config); }
+  .l-net    .card { border-left-color: var(--net); }
+  .l-net    .n    { border-color: var(--net); color: var(--net); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 17px 19px;
+    margin-bottom: 14px;
+  }
+  .panel h3 {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 11px;
+  }
+  .eq {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 2.05;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--ink-soft);
+  }
+  .eq .ok  { color: var(--green-strong); font-weight: 700; }
+  .eq .bad { color: var(--error); font-weight: 700; }
+  .eq .cmt { color: var(--muted); }
+
+  .warn { background: #fffaf3; border-color: #f0d6b5; }
+  .warn h3 { color: #b45309; }
+
+  footer {
+    margin-top: 42px;
+    padding-top: 15px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">TTACart &middot; LoginPage</div>
+  <h1>await this.goto(LoginPage.PATH);<br><span>how it flows internally</span></h1>
+  <p class="lead">One line inside <code>open()</code> passes through the spec, the page object, the base class and the config before it becomes an HTTP request.</p>
+
+  <div class="legend">
+    <span><i style="background:var(--test)"></i>test</span>
+    <span><i style="background:var(--page)"></i>page object</span>
+    <span><i style="background:var(--base)"></i>base class</span>
+    <span><i style="background:var(--config)"></i>config</span>
+    <span><i style="background:var(--net)"></i>network</span>
+  </div>
+
+  <div class="keyline">
+    The path stays a plain string the whole way down. <b>baseURL is only applied inside Playwright</b> &mdash; the page object never knows the host.
+  </div>
+
+  <h2>The flow</h2>
+  <div class="flow">
+
+    <div class="step l-test">
+      <div class="rail"><div class="n">1</div></div>
+      <div class="card">
+        <span class="pill">test</span>
+        <div class="what">The spec calls open() and waits</div>
+        <pre><code>await loginPage.open();</code></pre>
+        <div class="note">The <b>await</b> makes everything below sequential. Without it, the next line would race the page load.</div>
+      </div>
+    </div>
+
+    <div class="step l-page">
+      <div class="rail"><div class="n">2</div></div>
+      <div class="card">
+        <span class="pill">page object</span>
+        <div class="what">open() logs intent, then delegates</div>
+        <pre><code>this.log.info("Open login page");
+await this.goto(LoginPage.PATH);</code></pre>
+        <div class="note">The log fires <b>before</b> navigation, so if it throws you still have a breadcrumb. <code>open()</code> takes no arguments &mdash; the route is fixed in the class.</div>
+      </div>
+    </div>
+
+    <div class="step l-page">
+      <div class="rail"><div class="n">3</div></div>
+      <div class="card">
+        <span class="pill">page object</span>
+        <div class="what">PATH is read off the class, not the instance</div>
+        <pre><code>static readonly PATH = '/playwright/ttacart/';</code></pre>
+        <div class="note"><b>static</b> means it exists before any object is built. It is relative &mdash; no host, no protocol. Same pattern in every page object.</div>
+      </div>
+    </div>
+
+    <div class="step l-base">
+      <div class="rail"><div class="n">4</div></div>
+      <div class="card">
+        <span class="pill">base class</span>
+        <div class="what">goto() is inherited from BasePage</div>
+        <pre><code>protected async goto(relativePath: string): Promise&lt;void&gt;</code></pre>
+        <div class="note"><b>protected</b> is the point: subclasses may call it, tests cannot. A spec has to go through <code>open()</code>, so the route lives in one place.</div>
+      </div>
+    </div>
+
+    <div class="step l-base">
+      <div class="rail"><div class="n">5</div></div>
+      <div class="card">
+        <span class="pill">base class</span>
+        <div class="what">The path is handed to Playwright</div>
+        <pre><code>await this.page.goto(relativePath);</code></pre>
+        <div class="note">It uses <code>this.page</code> directly, <b>not</b> <code>this.el</code> &mdash; navigation skips the element wrapper entirely.</div>
+      </div>
+    </div>
+
+    <div class="step l-config">
+      <div class="rail"><div class="n">6</div></div>
+      <div class="card">
+        <span class="pill">config</span>
+        <div class="what">Playwright joins the path with baseURL</div>
+        <pre><code>new URL('/playwright/ttacart/', baseURL)</code></pre>
+        <div class="note">This is the only place the host gets added. See the panels below.</div>
+      </div>
+    </div>
+
+    <div class="step l-net">
+      <div class="rail"><div class="n">7</div></div>
+      <div class="card">
+        <span class="pill">network</span>
+        <div class="what">The browser requests the page and waits for load</div>
+        <pre><code>GET https://app.thetestingacademy.com/playwright/ttacart/
+200 OK   -&gt;   &lt;title&gt;TTACart - Login&lt;/title&gt;</code></pre>
+        <div class="note">Waits for the <b>load</b> event by default, with a 30 second navigation timeout.</div>
+      </div>
+    </div>
+
+    <div class="step l-base">
+      <div class="rail"><div class="n">8</div></div>
+      <div class="card">
+        <span class="pill">base class</span>
+        <div class="what">One extra safety wait</div>
+        <pre><code>await this.page.waitForLoadState('domcontentloaded');</code></pre>
+        <div class="note"><code>load</code> already fires after <code>DOMContentLoaded</code>, so this normally returns instantly. Insurance, not a real wait &mdash; it does not wait for <code>networkidle</code>.</div>
+      </div>
+    </div>
+
+    <div class="step l-test">
+      <div class="rail"><div class="n">9</div></div>
+      <div class="card">
+        <span class="pill">test</span>
+        <div class="what">Control comes back to the spec</div>
+        <pre><code>await loginPage.loginAs("standard_user", "tta_secre");</code></pre>
+        <div class="note">Only now is the login form guaranteed to be in the DOM.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <h2>Path resolution</h2>
+
+  <div class="panel">
+    <h3>Joining the two halves</h3>
+    <div class="eq">PATH      <span class="cmt">'/playwright/ttacart/'</span>
+baseURL   <span class="cmt">'https://app.thetestingacademy.com'</span>
+          <span class="cmt">------------------------------------------------</span>
+result    <span class="ok">'https://app.thetestingacademy.com/playwright/ttacart/'</span></div>
+  </div>
+
+  <div class="panel">
+    <h3>Where baseURL comes from</h3>
+    <div class="eq">.env    BASE_URL=                <span class="cmt">empty, so skipped</span>
+        TTA_ENV=qa               <span class="cmt">picks the environment</span>
+        QA_BASE_URL=https://app.thetestingacademy.com
+
+result  <span class="ok">https://app.thetestingacademy.com</span></div>
+    <div class="note">Resolved once when the config loads, not per test. Set <code>BASE_URL</code> to override, or pass a full <code>https://</code> URL to <code>goto()</code> and baseURL is ignored completely.</div>
+  </div>
+
+  <div class="panel warn">
+    <h3>Watch out: a leading slash resets to the origin</h3>
+    <div class="eq">host only        + /playwright/ttacart/  =&gt; <span class="ok">https://host/playwright/ttacart/</span>
+host with a path + /inventory.html       =&gt; <span class="bad">https://host/inventory.html</span>  <span class="cmt">prefix dropped</span></div>
+    <div class="note">Every page object uses a leading-slash <code>PATH</code>. That is harmless only because <code>QA_BASE_URL</code> is a bare origin. Point <code>BASE_URL</code> at something with a path segment and every page silently resolves to the wrong URL. <b>Keep baseURL a bare origin.</b></div>
+  </div>
+
+  <footer>AdvancePlaywrightFramework3x &middot; goto flow</footer>
+
+</div>
+</body>
+</html>

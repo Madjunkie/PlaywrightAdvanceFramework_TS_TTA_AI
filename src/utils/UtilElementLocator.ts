@@ -20,6 +20,8 @@ export const DEFAULT_ACTION_TIMEOUT_MS = 15_000;
  *   - `page.getByTestId('username')` (a Locator object).
  */
 
+
+
 export type Flex = string | Locator;
 
 export class UtilElementLocator {
@@ -32,6 +34,11 @@ export class UtilElementLocator {
         this.log = createLogger(scope);
     }
 
+    /**
+     * Converts a flexible target to a Playwright Locator.
+     * @param target 
+     * @returns 
+     */
     private toLocator(target: Flex): Locator {
         return typeof target === 'string' ? this.page.locator(target) : target;
     }

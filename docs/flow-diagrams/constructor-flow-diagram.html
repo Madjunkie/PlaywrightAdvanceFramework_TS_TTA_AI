@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Page object construction flow</title>
+<style>
+  :root {
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --green-strong: #0e8f70;
+    --ink: #181717;
+    --ink-soft: #2d2d2d;
+    --muted: #6b6963;
+    --line: #d9d5cc;
+    --surface: #ffffff;
+    --canvas: #f7f6f3;
+    --code-bg: #f2f1ed;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--sans);
+    background: var(--canvas);
+    color: var(--ink);
+    line-height: 1.55;
+    padding: 44px 24px 80px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--green-strong);
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: 1.42rem;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-bottom: 38px;
+  }
+  h1 span { color: var(--muted); font-weight: 400; }
+
+  h2 {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 18px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 17px 19px;
+    margin-bottom: 26px;
+  }
+  .panel h3 {
+    font-family: var(--mono);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 11px;
+  }
+  .eq {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 2.05;
+    white-space: pre;
+    overflow-x: auto;
+    color: var(--ink-soft);
+  }
+  .eq .ok, .ok   { color: var(--green-strong); font-weight: 700; }
+  .eq .cmt, .cmt { color: var(--muted); font-weight: 400; }
+
+  footer {
+    margin-top: 42px;
+    padding-top: 15px;
+    border-top: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">TTACart &middot; page objects</div>
+  <h1>new XxxPage(page)<br><span>which constructor runs first, for every page object</span></h1>
+
+  <h2>0 &middot; The shared pattern</h2>
+  <div class="panel">
+    <h3>Every page object &mdash; same three constructors</h3>
+    <div class="eq">new XxxPage(page)
+└─ super(page, 'XxxPage')              <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'XxxPage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('XxxPage')    <span class="cmt">// winston child</span>
+   └─ this.log  = createLogger('XxxPage')                     <span class="cmt">// second child</span>
+└─ back in the XxxPage body: n &times; page.locator('[data-test="…"]')
+       &darr;
+   unwind: UtilElementLocator <span class="ok">done</span> &rarr; BasePage <span class="ok">done</span> &rarr; XxxPage <span class="ok">done</span></div>
+  </div>
+
+  <h2>1 &middot; Login page</h2>
+  <div class="panel">
+    <h3>new LoginPage(page) &nbsp;<span class="cmt">scope 'LoginPage'</span></h3>
+    <div class="eq">new LoginPage(page)
+└─ super(page, 'LoginPage')            <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'LoginPage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('LoginPage')  <span class="cmt">// winston child</span>
+   └─ this.log  = createLogger('LoginPage')                   <span class="cmt">// second child</span>
+└─ back in the LoginPage body: 5 &times; page.locator('[data-test="…"]')
+   ├─ usernameInput, passwordInput, loginButton, errorBox, loginCredentialsHint</div>
+  </div>
+
+  <h2>2 &middot; Inventory page</h2>
+  <div class="panel">
+    <h3>new InventoryPage(page) &nbsp;<span class="cmt">scope 'InventoryPage'</span></h3>
+    <div class="eq">new InventoryPage(page)
+└─ super(page, 'InventoryPage')        <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'InventoryPage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('InventoryPage')
+   └─ this.log  = createLogger('InventoryPage')
+└─ back in the InventoryPage body: 7 &times; page.locator('[data-test="…"]')
+   ├─ title, sortDropdown, items, itemNames, itemPrices, cartLink, cartBadge</div>
+  </div>
+
+  <h2>3 &middot; Item detail page</h2>
+  <div class="panel">
+    <h3>new ItemDetailPage(page) &nbsp;<span class="cmt">scope 'ItemDetailPage'</span></h3>
+    <div class="eq">new ItemDetailPage(page)
+└─ super(page, 'ItemDetailPage')       <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'ItemDetailPage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('ItemDetailPage')
+   └─ this.log  = createLogger('ItemDetailPage')
+└─ back in the ItemDetailPage body: 5 &times; page.locator('[data-test="…"]')
+   ├─ itemName, itemPrice, addButton, removeButton, backButton</div>
+  </div>
+
+  <h2>4 &middot; Cart page</h2>
+  <div class="panel">
+    <h3>new CartPage(page) &nbsp;<span class="cmt">scope 'CartPage'</span></h3>
+    <div class="eq">new CartPage(page)
+└─ super(page, 'CartPage')             <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'CartPage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('CartPage')
+   └─ this.log  = createLogger('CartPage')
+└─ back in the CartPage body: 5 &times; page.locator('[data-test="…"]')
+   ├─ title, itemRows, itemNames, continueShoppingLink, checkoutButton</div>
+  </div>
+
+  <h2>5 &middot; Checkout step one</h2>
+  <div class="panel">
+    <h3>new CheckoutStepOnePage(page) &nbsp;<span class="cmt">scope 'CheckoutStepOnePage'</span></h3>
+    <div class="eq">new CheckoutStepOnePage(page)
+└─ super(page, 'CheckoutStepOnePage')  <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'CheckoutStepOnePage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('CheckoutStepOnePage')
+   └─ this.log  = createLogger('CheckoutStepOnePage')
+└─ back in the CheckoutStepOnePage body: 7 &times; page.locator('[data-test="…"]')
+   ├─ title, firstNameInput, lastNameInput, postalCodeInput, continueButton,
+   └─ cancelButton, errorBox</div>
+  </div>
+
+  <h2>6 &middot; Checkout step two</h2>
+  <div class="panel">
+    <h3>new CheckoutStepTwoPage(page) &nbsp;<span class="cmt">scope 'CheckoutStepTwoPage'</span></h3>
+    <div class="eq">new CheckoutStepTwoPage(page)
+└─ super(page, 'CheckoutStepTwoPage')  <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'CheckoutStepTwoPage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('CheckoutStepTwoPage')
+   └─ this.log  = createLogger('CheckoutStepTwoPage')
+└─ back in the CheckoutStepTwoPage body: 6 &times; page.locator('[data-test="…"]')
+   ├─ title, subtotalLabel, taxLabel, totalLabel, finishButton, cancelLink</div>
+  </div>
+
+  <h2>7 &middot; Checkout complete</h2>
+  <div class="panel">
+    <h3>new CheckoutCompletePage(page) &nbsp;<span class="cmt">scope 'CheckoutCompletePage'</span></h3>
+    <div class="eq">new CheckoutCompletePage(page)
+└─ super(page, 'CheckoutCompletePage') <span class="cmt">&lt;- BasePage ctor runs FIRST</span>
+   ├─ this.page = page
+   ├─ this.el   = new UtilElementLocator(page, 'CheckoutCompletePage')
+   │                ├─ this.page = page
+   │                └─ this.log  = createLogger('CheckoutCompletePage')
+   └─ this.log  = createLogger('CheckoutCompletePage')
+└─ back in the CheckoutCompletePage body: 4 &times; page.locator('[data-test="…"]')
+   ├─ title, completeHeader, completeText, backHomeButton</div>
+  </div>
+
+  <h2>8 &middot; All of them, in one test</h2>
+  <div class="panel">
+    <h3>Every new page object repeats the same chain</h3>
+    <div class="eq">test('&hellip;', async ({ page }) =&gt; {
+  new LoginPage(page)            <span class="cmt">-&gt; 3 ctors, 5 locators</span>
+  new InventoryPage(page)        <span class="cmt">-&gt; 3 ctors, 7 locators</span>
+  new ItemDetailPage(page)       <span class="cmt">-&gt; 3 ctors, 5 locators</span>
+  new CartPage(page)             <span class="cmt">-&gt; 3 ctors, 5 locators</span>
+  new CheckoutStepOnePage(page)  <span class="cmt">-&gt; 3 ctors, 7 locators</span>
+  new CheckoutStepTwoPage(page)  <span class="cmt">-&gt; 3 ctors, 6 locators</span>
+  new CheckoutCompletePage(page) <span class="cmt">-&gt; 3 ctors, 4 locators</span>
+})
+        &darr;
+  one Page handle  &rarr;  every object holds the same reference
+  BasePage ctor runs 7 times, UtilElementLocator 7 times, createLogger 14 times</div>
+  </div>
+
+  <footer>AdvancePlaywrightFramework3x &middot; constructor flow</footer>
+
+</div>
+</body>
+</html>

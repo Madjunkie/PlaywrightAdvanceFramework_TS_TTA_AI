@@ -49,4 +49,9 @@ export class LoginPage extends BasePage {
         await this.el.waitForHidden(this.loginButton);
     }
 
+
+    async expectErrorContains(text: string): Promise<void> {
+        await expect(this.errorBox).toBeVisible();
+        await expect(this.errorBox).toContainText(text);
+    }
 }

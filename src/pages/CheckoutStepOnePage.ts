@@ -1,6 +1,6 @@
 import { expect, Locator, Page } from '@playwright/test';
 import { BasePage } from './BasePage';
-import type { CheckoutCustomer as GuestUser } from '@utils/DataGenerator';
+import type { CheckoutCustomer as GuestUser } from '@utils/DataGenerators';
 
 /**
  * Checkout step 1 - guest details form (firstName / lastName / postalCode).
